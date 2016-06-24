@@ -28,13 +28,13 @@
 
 (defn commit
   [repo snapshot]
-  (let [{bs :branches cs :commits} repo
-        curr-branch    (:head bs)
+  (let [{h :head bs :branches cs :commits} repo
+        curr-branch    (bs h)
         new-commit     {:snapshot snapshot
-                        :parent-id  (:commit-id curr-branch)}
+                        :parent-id  (curr-branch :commit-id)}
         new-id         (count cs)
         updated-branch (assoc curr-branch :commit-id new-id)]
-    (assoc repo :head updated-branch
+    (assoc repo :branches (assoc bs h updated-branch)
                 :commits (conj cs new-commit))))
 
 (defn checkout [repo branch-name]
@@ -83,12 +83,17 @@
 
 (declare prev-ids)
 
+(defn get-log [repo path commit-id]
+  (let [sn   (get-in repo [:commits commit-id :snapshot])
+        file (get-in sn path)]
+    {:commit-id commit-id
+     :path-sh   file}))
+
 (defn history [repo path]
-  (let [{h :head bs :branches} repo
-        last-comm-id           (get-in bs [h :commit-id])
-        commit-ids             (prev-ids last-comm-id repo)]
-    (map (fn [id] get-in repo (flatten [:commits id :snapshot path]))
-         commit-ids)))
+  (let [{h :head bs :branches cs :commits} repo
+        last-comm-id          (get-in bs [h :commit-id])
+        commit-ids            (prev-ids last-comm-id repo)]
+    (map (partial get-log repo path) commit-ids)))
 
 (defn- succeed-merge [file]
   {:status         true
@@ -158,10 +163,10 @@
         last-comm-id (bs branch-name)]
     (prev-ids last-comm-id repo)))
 
-(defn- prev-ids
+(defn prev-ids
   [commit-id repo]
   (letfn [(get-parent-id [curr-id] (get-in repo [:commits curr-id :parent-id]))]
-    (take-while some? (iterate get-parent-id commit-id))))
+    (vec (take-while some? (iterate get-parent-id commit-id)))))
 
 (defn- three-way-preapare
   [repo branch-name]
